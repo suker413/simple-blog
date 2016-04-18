@@ -1,43 +1,39 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Apr 12 09:39:51 2016
+# @Date    : 2016-04-18 14:12:53
+# @Author  : Your Name (you@example.org)
+# @Link    : http://example.org
+# @Version : $Id$
 
-@author: Administrator
-"""
+import asyncio, aiomysql
+from Fields import Field
+
 import logging
 logging.basicConfig(level=logging.INFO)
 
-import aiomysql, asyncio
-from Fields import *
-
-
 def log(sql, args=()):
-    logging.info('SQL: %s args: %s' % (sql, str(args)))
-
+    logging.info('SQL: %s args: %s' % (sql, str(args or [])))
 
 async def create_pool(loop, **kw):
-    # 该函数用于创建连接池
     global __pool
     __pool = await aiomysql.create_pool(
-        host=kw.get('host', 'localhost'),  # 默认定义host名字为localhost
-        port=kw.get('port', 3306),      # 默认定义mysql的默认端口是3306
-        user=kw['user'],                # user是通过关键字参数传进来的
-        password=kw['password'],        # 密码也是通过关键字参数传进来的
-        db=kw['db'],                    # 数据库名字
-        charset=kw.get('charset', 'utf8'),  # 默认数据库字符集是utf8
-        autocommit=kw.get('autocommit', True),  # 默认自动提交事务
-        maxsize=kw.get('maxsize', 10),      # 连接池最多同时处理10个请求
-        minsize=kw.get('minsize', 1),       # 连接池最少1个请求
-        loop=loop       # 传递消息循环对象loop用于异步执行
-    )
-    return __pool
+        host=kw.get('host', 'localhost'),      # 默认定义host名字为localhost
+        port=kw.get('port', 3306),             # 默认定义mysql的默认端口是3306
+        user=kw['user'],                       # 用户名必须填写
+        password=kw['password'],               # 密码也是必须填写
+        db=kw['db'],                           # 数据库名字也是必须填写
+        charset=kw.get('charset', 'utf8'),     # 默认数据库字符集是utf8
+        autocommit=kw.get('autocommit', True), # 默认自动提交事务
+        maxsize=kw.get('maxsize', 10),         # 连接池最多同时处理10个请求
+        minsize=kw.get('minsize', 1),          # 连接池最少1个请求
+        loop=loop                              # 协程事件循环
+        )
 
-
-async def select(pool, sql, args=None, size=None):
+async def select(sql, args=None, size=None):
     log(sql, args)
-    async with pool.acquire() as conn:
+    async with __pool.acquire() as conn: # pool.acquire()已经取代 yield from pool的语法
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(sql.replace('?', '%s'), args or ())
+            await cur.execute(sql.replace('?', '%s'), args or [])
             if size:
                 rs = await cur.fetchmany(size)
             else:
@@ -45,15 +41,14 @@ async def select(pool, sql, args=None, size=None):
         logging.info('rows returned: %s' % len(rs))
         return rs
 
-async def execute(pool, sql, args, autocommit=True):
+async def execute(sql, args=None, autocommit=True):
     log(sql, args)
-
-    async with pool.acquire() as conn:
+    async with __pool.acquire() as conn:
         if not autocommit:
             await conn.begin()
         try:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(sql.replace('?', '%s'), args)
+                await cur.execute(sql.replace('?', '%s'), args or [])
                 affected = cur.rowcount
             if not autocommit:
                 await conn.commit()
@@ -73,8 +68,8 @@ class ModelMetaclass(type):
         table = attrs.get('__table__', name)
         logging.info('found model: %s (table: %s)' % (name, table))
 
-        mappings = {}
-        primary_key = None
+        mappings = {}      # 映射关系表
+        primary_key = None # 主键属性名
         for key, val in attrs.copy().items():
             if isinstance(val, Field):
                 logging.info('found mapping: %s ==> %s' % (key, val))
@@ -123,13 +118,16 @@ class Model(dict, metaclass=ModelMetaclass):
         return value
 
     @classmethod
-    async def findAll(cls, loop, where=None, args=None, **kw):
+    async def findAll(cls, where=None, args=None, **kw):
         ' find objects by where clause. '
         sql = [cls.__select__]
+        # WHERE查找条件的关键字
         if where:
             sql.append('where %s' % (where))
+        # ORDER BY是排序的关键字
         if kw.get('orderBy') is not None:
             sql.append('order by %s' % (kw['orderBy']))
+        # LIMIT 是筛选结果集的关键字
         limit = kw.get('limit')
         if limit is not None:
             if isinstance(limit, int):
@@ -140,34 +138,29 @@ class Model(dict, metaclass=ModelMetaclass):
                 args = limit
             else:
                 raise ValueError('Invalid limit value: %s' % str(limit))
-        rs = await select(loop, ' '.join(sql), args or ())
+        rs = await select(' '.join(sql), args)
         return [cls(**r) for r in rs]
 
     @classmethod
-    async def find(cls, pool, pk):
+    async def find(cls, pk):
         ' find object by primary key. '
-        rs = await select(pool, '%s where `%s`= ?' % (cls.__select__, cls.__primary_key__), [pk], 1)
-
+        rs = await select('%s where `%s`= ?' % (cls.__select__, cls.__primary_key__), [pk], 1)
         return cls(**rs[0]) if len(rs) else None
 
-    async def save(self, pool):
+    async def save(self):
         args = list(map(self.getValueOrDefault, self.__mappings__))
-        rows = await execute(pool, self.__insert__, args) # 使用默认插入函数
+        rows = await execute(self.__insert__, args) # 使用默认插入函数
         if rows != 1: # 插入失败就是rows!=1
-             logging.warn('failed to insert record: affected rows: %s' % rows)
+            logging.warn('failed to insert record: affected rows: %s' % rows)
 
-    async def update(self, pool):
-        args = list(map(self.get, list(self.__mappings__) + [self.__primary_key__]))
-        rows = await execute(pool, self.__update__, args)
+    async def update(self):
+        args = list(map(self.getValueOrDefault, list(self.__mappings__) + [self.__primary_key__]))
+        rows = await execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary key: affected rows: %s' % rows)
 
-    async def remove(self, pool):
+    async def remove(self):
         args = [self.get(self.__primary_key__)]
-        rows = await execute(pool, self.__delete__, args)
+        rows = await execute(self.__delete__, args)
         if rows != 1:
             logging.warn('failed to remove by primary key: affected rows: %s' % rows)
-
-
-if __name__ == '__main__':
-    pass

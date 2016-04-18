@@ -50,38 +50,3 @@ class Comment(Model):
     user_image = StringField(ddl='varchar(500)')
     content = TextField()
     created_at = FloatField(default=time.time)
-
-if __name__ == '__main__':
-    import aiomysql, asyncio, orm
-    loop = asyncio.get_event_loop()
-
-
-    async def orm_test():
-
-        pool = await orm.create_pool(loop, user='simpleblog',
-                                        password='test', db='simpleblog')
-        #--------------------测试insert into语句---------------------
-        for i in range(10):
-            u = User(name='test%s'%str(i), email='test%s@orm.org'%str(i),
-                        password='pw', image='test.jpg')
-            await u.save(pool)
-        #--------------------测试select语句--------------------------
-        users = await User.findAll(pool, orderBy='email desc', limit=(0,5))
-        for user in users:
-            print(user.name)
-        #--------------------测试update语句--------------------------
-        user = users[0]
-        user.name = 'new name'
-        await user.update(pool)
-        pk = user[User.__primary_key__]
-        test_user = await User.find(pool, pk)
-        assert test_user[User.__primary_key__] == pk, 'found a wrong guy'
-        assert user.name == test_user.name, 'Update was failed'
-        #--------------------测试delete语句-------------------------
-        users = await User.findAll(pool, orderBy='name desc', limit=(0,10))
-        for user in users:
-            await user.remove(pool)
-
-    loop.run_until_complete(orm_test())
-
-
