@@ -16,7 +16,7 @@ $(function() {
         el: '#vm',
         data: {
             email: '',
-            passwd: ''
+            password: ''
         },
         methods: {
             submit: function(event) {
@@ -26,7 +26,7 @@ $(function() {
                     email = this.email.trim().toLowerCase(),
                     data = {
                         email: email,
-                        passwd: this.passwd==='' ? '' : CryptoJS.SHA1(email + ':' + this.passwd).toString()
+                        password: this.password==='' ? '' : CryptoJS.SHA1(email + ':' + this.password).toString()
                     };
                 $form.postJSON('/api/authenticate', data, function(err, result) {
                     if (! err) {
@@ -54,7 +54,7 @@ $(function() {
                 <div class="uk-form-row">
                     <div class="uk-form-icon uk-width-1-1">
                         <i class="uk-icon-lock"></i>
-                        <input v-model="passwd" name="passwd" type="password" placeholder="口令" maxlength="50" class="uk-width-1-1 uk-form-large">
+                        <input v-model="password" name="password" type="password" placeholder="口令" maxlength="50" class="uk-width-1-1 uk-form-large">
                     </div>
                 </div>
                 <div class="uk-form-row">
