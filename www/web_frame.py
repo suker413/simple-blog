@@ -83,8 +83,8 @@ def has_request(fn):
 
 class RequestHandler(object):
 
-    def __init__(self, fn):
-        # self._app = app
+    def __init__(self, app, fn):
+        self._app = app
         self._func = fn
         self._has_request = has_request(fn)                 # 有没request参数
         self._has_var_kw = has_var_kw(fn)                   # 有没变长字典参数
@@ -105,7 +105,7 @@ class RequestHandler(object):
 
     async def __call__(self, request):
         kw = None
-        if any(self._has_request, self._has_var_kw, self._has_kw_only):
+        if any((self._has_request, self._has_var_kw, self._has_kw_only)):
             if request.method == 'POST':
                 if not request.content_type:
                     return web.HTTPBadRequest('Missing Content-Type.')
@@ -181,6 +181,7 @@ def add_route(app, fn):
                         fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
     # 正式注册为相应的url处理方法
     # 处理方法为RequestHandler的自省函数 '__call__'
+    # logging.info(str(RequestHandler(app, fn)))
     app.router.add_route(method, path, RequestHandler(app, fn))
 
 def add_routes(app, module_name):
@@ -217,7 +218,10 @@ def add_routes(app, module_name):
                 add_route(app, fn)
 
 if __name__ == '__main__':
-    def foo(a, *b, request, **d):
-        pass
+    # def foo(a, *b, request, **d):
+    #     pass
 
-    print(RequestHandler(foo))
+    # print(RequestHandler(foo))
+    print(os.path.abspath(__file__))
+    print(os.path.dirname(os.path.abspath(__file__)))
+    print(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static'))

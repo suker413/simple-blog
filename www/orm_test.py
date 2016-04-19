@@ -14,20 +14,21 @@ async def test():
                             password='test', db='simpleblog')
 
     #--------------------测试insert into语句---------------------
-    for i in range(5):
-        u = User(name='test%s'%str(i), email='test%s@orm.org'%str(i),
-                    password='pw', image='test.jpg')
-        await u.save()
+    users = await User.findAll()
+    if len(users) == 0:
+        for i in range(5):
+            u = User(name='test%s'%str(i), email='test%s@orm.org'%str(i),
+                        password='pw', image='test.jpg')
+            await u.save()
 
     #--------------------测试select语句--------------------------
-    users = await User.findAll(orderBy='email desc', limit=(1,5))
+    users = await User.findAll(orderBy='email desc')
     for user in users:
         print(user.name)
 
     #--------------------测试update语句--------------------------
     user = users[0]
-    # 主键 和 创建时间都是不应该被改的
-    u = User(id = user.id, name='new ame', email='new@orm.org',
+    u = User(id = user.id, name='new ame', email='new@orm.org', admin=True,
             password='new pw', image='new.jpg', created_at=user.created_at)
     await u.update()
     new_user = await User.find(user.id)
@@ -35,7 +36,7 @@ async def test():
     print('new user: %s' % str(new_user))
 
     #--------------------测试delete语句-------------------------
-    users = await User.findAll()
+    users = await User.findAll('email = ?', ['new@orm.org'])
     for user in users:
         await user.remove()
 

@@ -19,7 +19,7 @@ async def create_pool(loop, **kw):
     __pool = await aiomysql.create_pool(
         host=kw.get('host', 'localhost'),      # 默认定义host名字为localhost
         port=kw.get('port', 3306),             # 默认定义mysql的默认端口是3306
-        user=kw['user'],                       # 用户名必须填写
+        user=kw['user'],                       # 用户名是必须填写
         password=kw['password'],               # 密码也是必须填写
         db=kw['db'],                           # 数据库名字也是必须填写
         charset=kw.get('charset', 'utf8'),     # 默认数据库字符集是utf8
@@ -121,6 +121,8 @@ class Model(dict, metaclass=ModelMetaclass):
     async def findAll(cls, where=None, args=None, **kw):
         ' find objects by where clause. '
         sql = [cls.__select__]
+        if args is None:
+            args = []
         # WHERE查找条件的关键字
         if where:
             sql.append('where %s' % (where))
@@ -132,14 +134,25 @@ class Model(dict, metaclass=ModelMetaclass):
         if limit is not None:
             if isinstance(limit, int):
                 sql.append('limit ?')
-                args = (limit,)
+                args.append(limit)
             elif isinstance(limit, tuple) and len(limit) == 2:
                 sql.append('limit ?, ?')
-                args = limit
+                args.extends(limit)
             else:
                 raise ValueError('Invalid limit value: %s' % str(limit))
         rs = await select(' '.join(sql), args)
         return [cls(**r) for r in rs]
+
+    @classmethod
+    async def findNumber(cls, selectField, where=None, args=None):
+        ' find number by select and where. '
+        sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
+        if where:
+            sql.append('where %s' % (where))
+        rs = await select(' '.join(sql), args, 1)
+        if len(rs) == 0:
+            return None
+        return rs[0]['_num_']
 
     @classmethod
     async def find(cls, pk):
@@ -154,7 +167,7 @@ class Model(dict, metaclass=ModelMetaclass):
             logging.warn('failed to insert record: affected rows: %s' % rows)
 
     async def update(self):
-        args = list(map(self.getValueOrDefault, list(self.__mappings__) + [self.__primary_key__]))
+        args = list(map(self.get, list(self.__mappings__) + [self.__primary_key__]))
         rows = await execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary key: affected rows: %s' % rows)
