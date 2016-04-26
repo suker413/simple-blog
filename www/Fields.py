@@ -42,16 +42,3 @@ class TextField(Field):
     def __init__(self, name=None, default=None):
         # 这个是不能作为主键的对象，所以这里直接就设定成False了
         super().__init__(name, 'text', False, default)
-
-if __name__ == '__main__':
-    b = BooleanField('bool')
-    i = IntergerField('int')
-    f = FloatField('float')
-    s = StringField('string')
-    t = TextField('text')
-
-    for field in [b, i, f, s, t]:
-        print(field)
-        print('Primary key: %s' % field.primary_key)
-        print('default value: %s' % field.default)
-        print()
