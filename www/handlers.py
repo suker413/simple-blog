@@ -15,12 +15,18 @@ from config import configs
 
 COOKIE_NAME = 'awesession'
 _COOKIE_KEY = configs.session.secret
+_RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$')
+_RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
 
 def get_page_index(page_str):
     try:
         return max(int(page_str), 1)
     except ValueError:
         return 1
+
+def text2html(text):
+    lines = map(lambda s: '<p>%s</p>' % s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), filter(lambda s: s.strip() != '', text.split('\n')))
+    return ''.join(lines)
 
 def user2cookie(user, max_age):
     '''
@@ -61,9 +67,6 @@ async def cookie2user(cookie_str):
 def check_admin(request):
     if request.__user__ is None or not request.__user__.admin:
         raise APIPermissionError()
-
-_RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$')
-_RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
 
 @get('/')
 async def index(*, page='1'):
@@ -169,10 +172,24 @@ def signout(request):
 def manage():
     return 'redirect:/manage/blogs'
 
+@get('/manage/comments')
+def manage_comments(*, page='1'):
+    return {
+        '__template__': 'manage_comments.html',
+        'page_index': get_page_index(page)
+    }
+
 @get('/manage/blogs')
 def manage_blogs(*, page='1'):
     return {
         '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page)
+    }
+
+@get('/manage/users')
+def manage_users(*, page='1'):
+    return {
+        '__template__': 'manage_users.html',
         'page_index': get_page_index(page)
     }
 
@@ -230,6 +247,10 @@ async def api_delete_blog(id, request):
     await blog.remove()
     return dict(id=id)
 
+@get('/api/blogs/{id}')
+async def api_get_blog(id):
+    return await Blog.find(id)
+
 @get('/api/users')
 async def api_users(*, page='1'):
     page_index = get_page_index(page)
@@ -262,9 +283,29 @@ async def api_comments(*, page='1'):
     comments = await Comment.findAll(orderBy='created_at desc', limit=(page_info.offset, page_info.limit))
     return dict(page=page_info, comments=comments)
 
-@get('/api/blogs/{id}')
-async def api_get_blog(id):
-    return await Blog.find(id)
+@post('/api/blogs/{id}/comments')
+async def api_create_comment(id, request, *, content):
+    user = request.__user__
+    if user is None:
+        raise APIPermissionError('Please signin first.')
+    if not content or not content.strip():
+        raise APIValueError('content')
+    blog = await Blog.find(id)
+    if blog is None:
+        raise APIResourceNotFoundError('Blog')
+    comment = Comment(blog_id=blog.id, user_id=user.id, user_name=user.name, user_image=user.image, content=content.strip())
+    await comment.save()
+    return comment
+
+@post('/api/comments/{id}/delete')
+async def api_delete_comments(id, request):
+    check_admin(request)
+    c = await Comment.find(id)
+    if c is None:
+        raise APIResourceNotFoundError('Comment')
+    await c.remove()
+    return dict(id=id)
+
 
 
 

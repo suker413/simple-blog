@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 import aiomysql, asyncio
 from Fields import Field
 
-def log(sql, args=()):
+def log(sql, args=[]):
     logging.info('SQL: [%s] args: %s' % (sql, str(args)))
 
 async def create_pool(loop, **kw):
@@ -31,7 +31,7 @@ async def create_pool(loop, **kw):
 
 async def select(sql, args, size=None):
     log(sql, args)
-    async with __pool.acquire() as conn:
+    async with __pool.get() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(sql.replace('?', '%s'), args)
             if size:
@@ -43,7 +43,7 @@ async def select(sql, args, size=None):
 
 async def execute(sql, args, autocommit=True):
     log(sql, args)
-    async with __pool.acquire() as conn:
+    async with __pool.get() as conn:
         if not autocommit:
             await conn.begin()
         try:

@@ -55,7 +55,7 @@ class RequestHandler(object):
             if key in args:
                 kw[key] = value
             else:
-                logging.info('param %s not in args list' % key)
+                logging.warn('param %s not in args list' % key)
         # 如果有request参数的话也加入
         if 'request' in args:
             kw['request'] = request
