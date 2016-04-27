@@ -69,7 +69,7 @@ _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
 async def index(*, page='1'):
     page_index = get_page_index(page)
     num = await Blog.countRows('id')
-    page_info = Page(num)
+    page_info = Page(num, page_index)
     if num == 0:
         blogs = []
     else:
@@ -93,26 +93,12 @@ async def get_bolg(id):
         'comments': comments
     }
 
+# 注册一个新用户
 @get('/register')
 def register():
     return {
         '__template__': 'register.html'
     }
-
-@get('/signin')
-def signin():
-    return {
-        '__template__': 'signin.html'
-    }
-
-@get('/signout')
-def signout(request):
-    referer = request.headers.get('Referer')
-    r = web.HTTPFound(referer or '/')
-    # 清理掉cookie得用户信息数据
-    r.set_cookie(COOKIE_NAME, '-deleted-', max_age=0, httponly=True)
-    logging.info('user signed out')
-    return r
 
 @post('/api/users')
 async def api_register_user(*, email, name, password):
@@ -136,6 +122,13 @@ async def api_register_user(*, email, name, password):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
+# 用户登陆
+@get('/signin')
+def signin():
+    return {
+        '__template__': 'signin.html'
+    }
 
 @post('/api/authenticate')
 async def authenticate(*, email, password):
@@ -161,6 +154,81 @@ async def authenticate(*, email, password):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
+# 注销用户
+@get('/signout')
+def signout(request):
+    referer = request.headers.get('Referer')
+    r = web.HTTPFound(referer or '/')
+    # 清理掉cookie得用户信息数据
+    r.set_cookie(COOKIE_NAME, '-deleted-', max_age=0, httponly=True)
+    logging.info('user signed out')
+    return r
+
+@get('/manage')
+def manage():
+    return 'redirect:/manage/blogs'
+
+@get('/manage/blogs')
+def manage_blogs(*, page='1'):
+    return {
+        '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page)
+    }
+
+# 创建博客
+@get('/manage/blogs/create')
+def manage_create_blog():
+    return {
+        '__template__': 'manage_blog_edit.html',
+        'id': '',
+        'action': '/api/blogs'
+    }
+
+@post('/api/blogs')
+async def api_create_blog(request, *, name, summary, content):
+    check_admin(request)
+    if not name or not name.strip():
+        raise APIValueError('name', 'name cannot be empty.')
+    if not summary or not summary.strip():
+        raise APIValueError('summary', 'summary cannot be empty.')
+    if not content or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
+    blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
+    await blog.save()
+    return blog
+
+# 更改或删除博客
+@get('/manage/blogs/edit')
+def manage_edit_blog(id):
+    return {
+        '__template__': 'manage_blog_edit.html',
+        'id': id,
+        'action': '/api/blogs/%s' % id
+    }
+
+@post('/api/blogs/{id}')
+async def api_update_blog(id, request, *, name, summary, content):
+    check_admin(request)
+    blog = await Blog.find(id)
+    if not name or not name.strip():
+        raise APIValueError('name', 'name cannot be empty.')
+    if not summary or not summary.strip():
+        raise APIValueError('summary', 'summary cannot be empty.')
+    if not content or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
+    blog.name = name.strip()
+    blog.summary = summary.strip()
+    blog.content = content.strip()
+    await blog.update()
+    return blog
+
+@post('/api/blogs/{id}/delete')
+async def api_delete_blog(id, request):
+    check_admin(request)
+    blog = await Blog.find(id)
+    await blog.remove()
+    return dict(id=id)
 
 @get('/api/users')
 async def api_users(*, page='1'):
@@ -197,3 +265,6 @@ async def api_comments(*, page='1'):
 @get('/api/blogs/{id}')
 async def api_get_blog(id):
     return await Blog.find(id)
+
+
+

@@ -5,9 +5,8 @@
 # @Link    : http://example.org
 # @Version : $Id$
 
-import asyncio, functools, inspect, logging, os, json
+import asyncio, functools, inspect, logging, os
 
-from urllib import parse
 from aiohttp import web
 
 from apis import APIError
@@ -41,56 +40,31 @@ def post(path):
 
 #--------------------------------------------------------------------------------------
 class RequestHandler(object):
-    def __init__(self, app, func):
-        self._app = app
+    def __init__(self, func):
         self._func = func
-        self._kw = {}
-        self._has_request_arg = False
-        self._has_var_kw_arg = False
-        self._has_named_kw_args = False
-        self._named_kw_args = []
-        self._required_kw_args = []
-        self.init()
-
-    def init(self):
-        sig = inspect.signature(self._func)
-        params = sig.parameters
-        for name, param in params.items():
-            if param.kind == inspect.Parameter.KEYWORD_ONLY:
-                self._has_named_kw_args = True
-                self._named_kw_args.append(name)
-                if param.default == inspect.Parameter.empty:
-                    self._required_kw_args.append(name)
-            if param.kind == inspect.Parameter.VAR_KEYWORD:
-                self._has_var_kw_arg = True
-            if name == 'request':
-                self._has_request_arg = True
-                continue
-            if self._has_request_arg and param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-                raise ValueError('request must be the last named parameter in function: %s%s' % (self._func.__name__, str(sig)))
-
-        self._named_kw_args = tuple(self._named_kw_args)
-        self._required_kw_args = tuple(self._required_kw_args)
-
-    def __str__(self):
-        s = 'has request arg: %s\n' % str(self._has_request_arg)
-        s += 'has var kw arg: %s\n' % str(self._has_var_kw_arg)
-        s += 'has named kw args: %s\n' % str(self._has_named_kw_args)
-        s += 'named kw args: %s\n' % str(self._named_kw_args)
-        s += 'required kw args: %s\n' % str(self._required_kw_args)
-        return s
 
     async def __call__(self, request):
-        if request.method == 'POST':
-            self._kw = request.__data__
-        elif request.method == 'GET':
-            self._kw = dict(**request.match_info)
+        # 获取函数的参数表
+        args = list(inspect.signature(self._func).parameters)
+        logging.info('required args: %s' % str(args))
+        # 获取match_info的参数值，例如@get('/blog/{id}')之类的参数值
+        kw = dict(**request.match_info)
+        # 获取从data_factory函数处理过的参数值
+        for key, value in request.__data__.items():
+            # 如果函数的参数表有这参数名就加入
+            if key in args:
+                kw[key] = value
+            else:
+                logging.info('param %s not in args list' % key)
+        # 如果有request参数的话也加入
+        if 'request' in args:
+            kw['request'] = request
 
-        if self._has_request_arg:
-            self._kw['request'] = request
-        print('args: %s' % str(self._kw))
-        return await self._func(**self._kw)
-
+        logging.info('call with args: %s' % str(kw))
+        try:
+            return await self._func(**kw)
+        except APIError as e:
+            return dict(error=e.error, data=e.data, message=e.message)
 
 #-------------------------------------------------------------------------------------
 def add_route(app, func):
@@ -103,7 +77,7 @@ def add_route(app, func):
 
     args = ', '.join(inspect.signature(func).parameters.keys())
     logging.info('add route %s %s => %s(%s)' % (method, path, func.__name__, args))
-    app.router.add_route(method, path, RequestHandler(app, func))
+    app.router.add_route(method, path, RequestHandler(func))
 
 def add_routes(app, module_name):
     n = module_name.rfind('.')
@@ -126,8 +100,3 @@ def add_static(app):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     app.router.add_static('/static/', path)
     logging.info('add static %s => %s' % ('/static/', path))
-
-if __name__ == '__main__':
-    def foo(*, a, request, b):
-        pass
-    print(RequestHandler('', foo))

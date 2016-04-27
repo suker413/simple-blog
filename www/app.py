@@ -8,9 +8,11 @@ Created on Tue Apr 12 08:16:45 2016
 import logging
 logging.basicConfig(level=logging.INFO)
 
-import asyncio, json, datetime, time, os
+import asyncio, json, time, os
 
 from aiohttp import web
+from datetime import datetime
+from urllib import parse
 from jinja2 import Environment, FileSystemLoader
 
 from orm import create_pool
@@ -44,18 +46,6 @@ async def logger_factory(app, handler):
         logging.info('Response: %s %s' %(request.method, request.path))
         return await handler(request)
     return logger
-
-async def data_factory(app, handler):
-    async def  parse_data(request):
-        if request.method == 'POST':
-            if request.content_type.startswith('application/json'):
-                request.__data__ = await request.json()
-                logging.info('request json: %s' % str(request.__data__))
-            elif request.content_type.startswith('application/x-www-form-urlencoded'):
-                request.__data__ = await request.post()
-                logging.info('request form: %s' % str(request.__data__))
-        return await handler(request)
-    return parse_data
 
 async def response_factory(app, handler):
     async def response(request):
@@ -110,9 +100,27 @@ async def auth_factory(app, handler):
                 logging.info('set current user: %s' % user.email)
                 request.__user__ = user
         if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
-            return web.HTTPFound('/signin')
-        return (await handler(request))
+            return web.HTTPFound('/')
+        return await handler(request)
     return auth
+
+async def data_factory(app, handler):
+    async def  parse_data(request):
+        # 把数据封装为一个字典
+        request.__data__ = dict()
+        # 从POST方法截取数据
+        if request.method == 'POST':
+            if request.content_type.startswith('application/json'):
+                request.__data__ = await request.json()
+            elif request.content_type.startswith('application/x-www-form-urlencoded'):
+                request.__data__ = await request.post()
+        # 从GET方法截取数据
+        elif request.method == 'GET':
+            qs = request.query_string
+            request.__data__ = {k: v[0] for k, v in parse.parse_qs(qs, True).items()}
+        logging.info('parsed data: %s' % str(request.__data__))
+        return await handler(request)
+    return parse_data
 
 
 def datetime_filter(t):
@@ -132,7 +140,7 @@ async def init(loop):
     await create_pool(loop, user='simpleblog',
                             password='test', db='simpleblog')
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, data_factory, auth_factory, response_factory])
+        logger_factory, response_factory, auth_factory, data_factory])
     init_jinja2(app, filters=dict(datetime=datetime_filter))
 
     add_static(app)

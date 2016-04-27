@@ -156,7 +156,6 @@ class Model(dict, metaclass=ModelMetaclass):
     async def find(cls, pk):
         ' find object by primary key. '
         rs = await select('%s where `%s`= ?' % (cls.__select__, cls.__primary_key__), [pk], 1)
-
         return cls(**rs[0]) if len(rs) else None
 
     async def save(self):
