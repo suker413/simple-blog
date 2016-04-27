@@ -45,19 +45,19 @@ class RequestHandler(object):
 
     async def __call__(self, request):
         # 获取函数的参数表
-        args = list(inspect.signature(self._func).parameters)
-        logging.info('required args: %s' % str(args))
+        required_args = inspect.signature(self._func).parameters
+        logging.info('required args: %s' % str(required_args))
         # 获取match_info的参数值，例如@get('/blog/{id}')之类的参数值
         kw = dict(**request.match_info)
         # 获取从data_factory函数处理过的参数值
         for key, value in request.__data__.items():
             # 如果函数的参数表有这参数名就加入
-            if key in args:
+            if key in required_args:
                 kw[key] = value
             else:
                 logging.warn('param %s not in args list' % key)
         # 如果有request参数的话也加入
-        if 'request' in args:
+        if 'request' in required_args:
             kw['request'] = request
 
         logging.info('call with args: %s' % str(kw))

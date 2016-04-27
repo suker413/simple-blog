@@ -140,7 +140,7 @@ async def init(loop):
     await create_pool(loop, user='simpleblog',
                             password='test', db='simpleblog')
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, response_factory, auth_factory, data_factory])
+        logger_factory, auth_factory, response_factory, data_factory])
     init_jinja2(app, filters=dict(datetime=datetime_filter))
 
     add_static(app)
