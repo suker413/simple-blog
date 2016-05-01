@@ -4,11 +4,10 @@ Created on Tue Apr 12 09:40:51 2016
 
 @author: Administrator
 """
-import time, uuid
+import functools, hashlib, time, uuid
 from Fields import *
 from orm import Model
 
-import functools
 StringField = functools.partial(StringField, ddl='varchar(50)')
 
 def next_id():
@@ -25,6 +24,12 @@ class User(Model):
     name = StringField()
     image = StringField(ddl='varchar(500)')
     created_at = FloatField(default=time.time)
+
+    async def register(self):
+        self.id = next_id()
+        sha1_pw = '%s:%s'%(self.id, self.password)
+        self.password = hashlib.sha1(sha1_pw.encode('utf-8')).hexdigest()
+        await self.save()
 
 # 定义博客类
 class Blog(Model):

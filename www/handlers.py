@@ -8,9 +8,9 @@ import asyncio, logging, hashlib, json, markdown2, re, time, os
 
 from aiohttp import web
 
-from apis import Page, APIValueError, APIResourceNotFoundError
+from apis import Page, APIValueError, APIResourceNotFoundError, APIPermissionError
 from web_frame import get, post
-from models import User, Blog, Comment, next_id
+from models import User, Blog, Comment
 from config import configs
 
 COOKIE_NAME = 'awesession'
@@ -118,10 +118,8 @@ async def api_register_user(*, email, name, password):
     users = await User.findAll('email = ?', [email])
     if len(users) > 0:
         raise ('register:failed', 'email', 'Email is already in use.')
-    uid = next_id()
-    sha1_pw = '%s:%s' % (uid, password)
-    user = User(id=uid, name=name.strip(), email=email, password=hashlib.sha1(sha1_pw.encode('utf-8')).hexdigest(), image='empty')
-    await user.save()
+    user = User(name=name.strip(), email=email, password=password, image='empty')
+    await user.register()
     # make session cookie
     r = web.Response()
     r.set_cookie(COOKIE_NAME, user2cookie(user, 86400), max_age=86400, httponly=True)

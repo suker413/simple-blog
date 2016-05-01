@@ -28,7 +28,7 @@ async def create_pool(loop, **kw):
         minsize=kw.get('minsize', 1),       # 连接池最少1个请求
         loop=loop       # 传递消息循环对象loop用于异步执行
     )
-
+# 用于SQL的SELECT语句
 async def select(sql, args, size=None):
     log(sql, args)
     async with __pool.get() as conn:
@@ -41,6 +41,7 @@ async def select(sql, args, size=None):
         logging.info('rows returned: %s' % len(rs))
         return rs
 
+# 用于SQL的INSERT INTO，UPDATE，DELETE语句
 async def execute(sql, args, autocommit=True):
     log(sql, args)
     async with __pool.get() as conn:
@@ -61,28 +62,30 @@ async def execute(sql, args, autocommit=True):
 class ModelMetaclass(type):
 
     def __new__(cls, name, bases, attrs):
-
+        # 忽略父类
         if name == 'Model':
             return type.__new__(cls, name, bases, attrs)
-
+        # 找到表名
         table = attrs.get('__table__', name)
         logging.info('found model: %s (table: %s)' % (name, table))
-
+        # 建立映射关系表和找到主键
         mappings = {}
         primary_key = None
         for key, val in attrs.copy().items():
             if isinstance(val, Field):
-                logging.info('found mapping: %s ==> %s' % (key, val))
+                # 把Field属性类保存在映射映射关系表，并从原属性列表中删除
                 mappings[key] = attrs.pop(key)
+                logging.info('found mapping: %s ==> %s' % (key, val))
+                # 查找并检验主键是否唯一
                 if val.primary_key:
                     if primary_key:
                         raise KeyError('Duplicate primary key for field: %s' % key)
                     primary_key = key
         if not primary_key:
             raise KeyError('Primary key not found.')
-
+        # 创建新的类的属性
         attrs['__table__'] = table                   # 保存表名
-        attrs['__mappings__'] = mappings             # 保存属性和列的映射关系
+        attrs['__mappings__'] = mappings             # 映射关系表
         attrs['__primary_key__'] = primary_key       # 主键属性名
         #-----------------------默认SQL语句--------------------------
         attrs['__select__'] = 'select * from `%s`' % (table)
@@ -104,7 +107,7 @@ class Model(dict, metaclass=ModelMetaclass):
 
     def __setattr__(self, attr, value):
         self[attr] = value
-
+    # 取值或取默认值
     def getValueOrDefault(self, key):
         value = getattr(self, key, None)
         if value is None:
@@ -114,7 +117,7 @@ class Model(dict, metaclass=ModelMetaclass):
                 logging.debug('using default value for %s:%s' % (key, str(value)))
                 setattr(self, key, value)
         return value
-
+    # 查找所有合乎条件的信息
     @classmethod
     async def findAll(cls, where=None, args=None, **kw):
         ' find objects by where clause. '
@@ -140,7 +143,7 @@ class Model(dict, metaclass=ModelMetaclass):
                 raise ValueError('Invalid limit value: %s' % str(limit))
         rs = await select(' '.join(sql), args)
         return [cls(**r) for r in rs]
-
+    # 根据列名和条件查看数据库有多少条信息
     @classmethod
     async def countRows(cls, selectField, where=None, args=None):
         ' find number by select and where. '
@@ -151,25 +154,25 @@ class Model(dict, metaclass=ModelMetaclass):
         if len(rs) == 0:
             return None
         return rs[0]['_num_']
-
+    # 根据主键查找一个实例的信息
     @classmethod
     async def find(cls, pk):
         ' find object by primary key. '
         rs = await select('%s where `%s`= ?' % (cls.__select__, cls.__primary_key__), [pk], 1)
         return cls(**rs[0]) if len(rs) else None
-
+    # 把一个实例保存到数据库
     async def save(self):
         args = list(map(self.getValueOrDefault, self.__mappings__))
         rows = await execute(self.__insert__, args) # 使用默认插入函数
         if rows != 1: # 插入失败就是rows!=1
             logging.warn('failed to insert record: affected rows: %s' % rows)
-
+    # 更改一个实例在数据库的信息
     async def update(self):
         args = list(map(self.get, list(self.__mappings__) + [self.__primary_key__]))
         rows = await execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary key: affected rows: %s' % rows)
-
+    # 把一个实例从数据库中删除
     async def remove(self):
         args = [self.get(self.__primary_key__)]
         rows = await execute(self.__delete__, args)

@@ -9,7 +9,7 @@ async def test():
     await create_pool(loop, user='simpleblog',
                             password='test', db='simpleblog')
 
-    #--------------------测试count rows语句---------------------
+    # --------------------测试count rows语句---------------------
     rows = await User.countRows('id')
     logging.info('rows is: %s' % rows)
 
@@ -26,8 +26,9 @@ async def test():
         logging.info('name: %s, email: %s' %(user.name, user.email))
 
     # #--------------------测试update语句--------------------------
-    user = users[2]
-    user.email = 'updated@sina.com'
+    user = users[1]
+    user.email = 'user@orm.com'
+    user.name = 'user'
     await user.update()
 
     # #--------------------测试查找指定用户-------------------------
@@ -35,7 +36,7 @@ async def test():
     logging.info('name: %s, email: %s' %(user.name, user.email))
 
     #--------------------测试delete语句-------------------------
-    users = await User.findAll(orderBy='created_at', limit=(2, 5))
+    users = await User.findAll(orderBy='created_at', limit=(2, 10))
     for user in users:
         await user.remove()
 

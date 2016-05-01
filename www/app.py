@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 import asyncio, json, time, os
 
+
 from aiohttp import web
 from datetime import datetime
 from urllib import parse
@@ -18,7 +19,9 @@ from jinja2 import Environment, FileSystemLoader
 from orm import create_pool
 from web_frame import add_routes, add_static
 from handlers import COOKIE_NAME, cookie2user
+from config import configs
 
+ # 初始化jinja2
 def init_jinja2(app, **kw):
     logging.info('init jinja2...')
     options = dict(
@@ -29,17 +32,17 @@ def init_jinja2(app, **kw):
         variable_end_string = kw.get('variable_end_string', '}}'),
         auto_reload = kw.get('auto_reload', True)
     )
-    path = kw.get('path', None)
-    if path is None:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+    path = kw.get('path', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'))
     logging.info('set jinja2 template path: %s' % path)
     env = Environment(loader=FileSystemLoader(path), **options)
-    filters = kw.get('filters', None)
+    filters = kw.get('filters')
     if filters is not None:
         for name, ftr in filters.items():
             env.filters[name] = ftr
     app['__templating__'] = env
 
+#--------------------------工厂函数------------------------------------
+# 在每个响应之前打印日志
 async def logger_factory(app, handler):
     async def logger(request):
         print()
@@ -47,10 +50,26 @@ async def logger_factory(app, handler):
         return await handler(request)
     return logger
 
+# 通过cookie找到当前用户信息，把用户绑定在request.__user__
+async def auth_factory(app, handler):
+    async def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user = await cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+            return web.HTTPFound('/')
+        return await handler(request)
+    return auth
+
+# 把任何返回值封装成浏览器可正确显示的Response对象
 async def response_factory(app, handler):
     async def response(request):
         logging.info('Response handler...')
-        # 执行ResponseHandler的内部函数
         r = await handler(request)
         if  isinstance(r, web.StreamResponse):
             return r
@@ -72,6 +91,7 @@ async def response_factory(app, handler):
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:
+                # 如果用jinja2渲染，绑定已验证过的用户
                 r['__user__'] = request.__user__
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
@@ -88,22 +108,8 @@ async def response_factory(app, handler):
         return resp
     return response
 
-
-async def auth_factory(app, handler):
-    async def auth(request):
-        logging.info('check user: %s %s' % (request.method, request.path))
-        request.__user__ = None
-        cookie_str = request.cookies.get(COOKIE_NAME)
-        if cookie_str:
-            user = await cookie2user(cookie_str)
-            if user:
-                logging.info('set current user: %s' % user.email)
-                request.__user__ = user
-        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
-            return web.HTTPFound('/')
-        return await handler(request)
-    return auth
-
+# 把GET和POST返回的数据绑定在request.__data__
+# 以便在ResponseHandler函数内部使用
 async def data_factory(app, handler):
     async def  parse_data(request):
         # 把数据封装为一个字典
@@ -122,7 +128,6 @@ async def data_factory(app, handler):
         return await handler(request)
     return parse_data
 
-
 def datetime_filter(t):
     delta = int(time.time() - t)
     if delta < 60:
@@ -137,8 +142,7 @@ def datetime_filter(t):
     return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
 async def init(loop):
-    await create_pool(loop, user='simpleblog',
-                            password='test', db='simpleblog')
+    await create_pool(loop, **configs.db)
     app = web.Application(loop=loop, middlewares=[
         logger_factory, auth_factory, response_factory, data_factory])
     init_jinja2(app, filters=dict(datetime=datetime_filter))

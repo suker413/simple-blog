@@ -67,18 +67,7 @@ class RequestHandler(object):
             return dict(error=e.error, data=e.data, message=e.message)
 
 #-------------------------------------------------------------------------------------
-def add_route(app, func):
-    method = getattr(func, '__method__', None)
-    path = getattr(func, '__route__', None)
-    if None in (method, path):
-        raise ValueError('@get or @post not defined in %s.' % str(func))
-    if not asyncio.iscoroutinefunction(func) and not inspect.isgeneratorfunction(func):
-        func = asyncio.coroutine(func)
-
-    args = ', '.join(inspect.signature(func).parameters.keys())
-    logging.info('add route %s %s => %s(%s)' % (method, path, func.__name__, args))
-    app.router.add_route(method, path, RequestHandler(func))
-
+# 添加一个模块的所有路由
 def add_routes(app, module_name):
     n = module_name.rfind('.')
     if n == -1:
@@ -94,8 +83,12 @@ def add_routes(app, module_name):
             method = getattr(func, '__method__', None)
             path = getattr(func, '__route__', None)
             if method and path:
-                add_route(app, func)
+                func = asyncio.coroutine(func)
+                args = ', '.join(inspect.signature(func).parameters.keys())
+                logging.info('add route %s %s => %s(%s)' % (method, path, func.__name__, args))
+                app.router.add_route(method, path, RequestHandler(func))
 
+# 添加静态文件夹的路径
 def add_static(app):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     app.router.add_static('/static/', path)

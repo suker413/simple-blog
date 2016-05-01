@@ -9,13 +9,7 @@ from aiohttp import web
 from web_frame import get, post
 from models import User, Blog, Comment
 
-@get('/uesrs')
-async def get_users():
-    users = await User.findAll()
-    return {
-        '__template__': 'test.html',
-        'users': users
-    }
+
 
 @get('/blogs')
 def blogs(request):
