@@ -1,9 +1,8 @@
 server {
     listen      80;
-
-    root       /srv/simpleblog/www;
-    access_log /srv/simpleblog/log/access_log;
-    error_log  /srv/simpleblog/log/error_log;
+    root       /home/ubuntu/simpleblog/www;
+    access_log /home/ubuntu/simpleblog/log/access.log;
+    error_log  /home/ubuntu/simpleblog/log/error.log;
 
     # server_name simpleblog.liaoxuefeng.com;
 
@@ -16,12 +15,12 @@ server {
 
     sendfile on;
 
-    location /favicon.ico {
-        root /srv/simpleblog/www;
-    }
+#    location /favicon.ico {
+#        root /home/ubuntu/simpleblog/www;
+#    }
 
     location ~ ^\/static\/.*$ {
-        root /srv/simpleblog/www;
+        root /home/ubuntu/simpleblog/www;
     }
 
     location / {

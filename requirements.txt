@@ -1,1 +1,0 @@
-jinja2==2.8aiohttp==0.21.5aiomysql==0.0.7
